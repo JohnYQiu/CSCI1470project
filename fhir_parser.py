@@ -24,7 +24,6 @@ from __future__ import annotations
 import json
 import random
 import uuid
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
@@ -48,9 +47,33 @@ EMS_TYPE_SNOMED = {
     "185347001",  # Encounter for problem
     "32485007",  # Hospital admission
 }
+FHIR_FILE_SUFFIXES = (".json", ".ndjson")
+VITAL_LOINC_TO_COLUMN = {
+    LOINC_HEART_RATE: "heart_rate",
+    LOINC_SYSTOLIC: "systolic_bp",
+    LOINC_DIASTOLIC: "diastolic_bp",
+    LOINC_RESP_RATE: "respiratory_rate",
+    LOINC_SPO2: "spo2",
+    LOINC_TEMP_F: "temperature",
+}
+TRANSPORT_COMPLAINTS = ("Chest pain", "Shortness of breath", "Syncope")
+REFUSAL_COMPLAINTS = ("General weakness", "Fall injury", "Abdominal pain")
 
 
 def _parse_dt(value: str | None) -> datetime | None:
+    """
+    Parse an ISO-like FHIR date or datetime string into a ``datetime`` object.
+
+    Parameters
+    ----------
+    value
+        Raw date or datetime string pulled from a FHIR resource field.
+
+    Returns
+    -------
+    parsed_datetime
+        Parsed ``datetime`` value, or ``None`` when the input is missing or invalid.
+    """
     if not value or not isinstance(value, str):
         return None
     v = value.replace("Z", "+00:00")
@@ -61,6 +84,19 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 
 def _patient_id_from_ref(ref: str | None) -> str | None:
+    """
+    Extract the patient identifier from a FHIR reference string.
+
+    Parameters
+    ----------
+    ref
+        FHIR reference such as ``Patient/<id>`` or ``urn:uuid:<id>``.
+
+    Returns
+    -------
+    patient_id
+        Patient identifier string parsed from the reference, or ``None`` if unavailable.
+    """
     if not ref:
         return None
     # "Patient/abc" or "urn:uuid:abc"
@@ -69,8 +105,72 @@ def _patient_id_from_ref(ref: str | None) -> str | None:
     return ref
 
 
+def has_fhir_resources(path: str | Path) -> bool:
+    """
+    Check whether a path already contains FHIR JSON or NDJSON resources.
+
+    Parameters
+    ----------
+    path
+        Candidate file or directory path to inspect for FHIR resources.
+
+    Returns
+    -------
+    has_resources
+        ``True`` when the path points to usable FHIR input data, otherwise ``False``.
+    """
+    resource_path = Path(path)
+    if resource_path.is_file():
+        return resource_path.suffix.lower() in FHIR_FILE_SUFFIXES
+    if not resource_path.is_dir():
+        return False
+    return any(resource_path.glob("**/*.json")) or any(resource_path.glob("**/*.ndjson"))
+
+
+def _iter_resources_from_obj(data: Any) -> Iterator[dict[str, Any]]:
+    """
+    Iterate over FHIR resources stored inside a parsed JSON-like object.
+
+    Parameters
+    ----------
+    data
+        Parsed JSON value that may represent a single resource, bundle, or list.
+
+    Returns
+    -------
+    resources
+        Iterator yielding each FHIR resource dictionary contained in ``data``.
+    """
+    if isinstance(data, list):
+        for item in data:
+            yield from _iter_resources_from_obj(item)
+        return
+    if not isinstance(data, dict):
+        return
+    if data.get("resourceType") == "Bundle":
+        for entry in data.get("entry", []) or []:
+            resource = entry.get("resource")
+            if resource:
+                yield resource
+        return
+    if data.get("resourceType"):
+        yield data
+
+
 def _iter_resources_from_path(path: Path) -> Iterator[dict[str, Any]]:
-    """Yield FHIR resource dicts from a file or directory."""
+    """
+    Iterate over FHIR resource dictionaries stored under a file or directory path.
+
+    Parameters
+    ----------
+    path
+        File or directory containing JSON or NDJSON FHIR resources.
+
+    Returns
+    -------
+    resources
+        Iterator yielding parsed FHIR resource dictionaries discovered at the given path.
+    """
     if path.is_file():
         yield from _iter_resources_from_file(path)
         return
@@ -82,43 +182,61 @@ def _iter_resources_from_path(path: Path) -> Iterator[dict[str, Any]]:
                 line = line.strip()
                 if not line:
                     continue
-                obj = json.loads(line)
-                if obj.get("resourceType") == "Bundle":
-                    for e in obj.get("entry", []) or []:
-                        r = e.get("resource")
-                        if r:
-                            yield r
-                else:
-                    yield obj
+                yield from _iter_resources_from_obj(json.loads(line))
 
 
 def _iter_resources_from_file(path: Path) -> Iterator[dict[str, Any]]:
+    """
+    Iterate over FHIR resource dictionaries contained in a single JSON file.
+
+    Parameters
+    ----------
+    path
+        JSON file containing a bundle, list of resources, or single resource object.
+
+    Returns
+    -------
+    resources
+        Iterator yielding each parsed FHIR resource dictionary from the file.
+    """
     with path.open(encoding="utf-8") as f:
         data = json.load(f)
-    if data.get("resourceType") == "Bundle":
-        for entry in data.get("entry", []) or []:
-            res = entry.get("resource")
-            if res:
-                yield res
-    elif isinstance(data, list):
-        for item in data:
-            if isinstance(item, dict) and item.get("resourceType"):
-                yield item
-    elif isinstance(data, dict) and data.get("resourceType"):
-        yield data
+    yield from _iter_resources_from_obj(data)
 
 
 def _first_coding_list(concept: dict | None) -> list[dict]:
+    """
+    Extract the list of coding dictionaries from a FHIR CodeableConcept-like object.
+
+    Parameters
+    ----------
+    concept
+        Dictionary that may contain a ``coding`` list.
+
+    Returns
+    -------
+    codings
+        List of coding dictionaries found on the concept, or an empty list if absent.
+    """
     if not concept:
         return []
-    out: list[dict] = []
-    for cc in concept.get("coding", []) or []:
-        if isinstance(cc, dict):
-            out.append(cc)
-    return out
+    return [coding for coding in concept.get("coding", []) or [] if isinstance(coding, dict)]
 
 
 def _concept_text(concept: dict | None) -> str:
+    """
+    Derive a human-readable text label from a FHIR CodeableConcept-like object.
+
+    Parameters
+    ----------
+    concept
+        Dictionary that may contain ``text`` or ``coding`` fields.
+
+    Returns
+    -------
+    text
+        Preferred text, display, or code string describing the concept.
+    """
     if not concept:
         return ""
     t = concept.get("text")
@@ -132,6 +250,20 @@ def _concept_text(concept: dict | None) -> str:
 
 
 def _obs_effective_dt(obs: dict) -> datetime | None:
+    """
+    Extract the effective datetime associated with an observation.
+
+    Parameters
+    ----------
+    obs
+        Observation resource dictionary that may contain ``effectiveDateTime`` or
+        ``effectivePeriod`` information.
+
+    Returns
+    -------
+    effective_datetime
+        Observation timestamp as a ``datetime`` object, or ``None`` if unavailable.
+    """
     eff = obs.get("effectiveDateTime")
     if eff:
         return _parse_dt(eff)
@@ -140,16 +272,40 @@ def _obs_effective_dt(obs: dict) -> datetime | None:
 
 
 def _obs_loinc_code(obs: dict) -> str | None:
-    for c in obs.get("code", {}).get("coding", []) or []:
-        if c.get("system") in (
-            "http://loinc.org",
-            "http://loinc.org/",
-        ):
-            return c.get("code")
+    """
+    Extract the LOINC code assigned to an observation, when present.
+
+    Parameters
+    ----------
+    obs
+        Observation resource dictionary whose code field may contain LOINC codings.
+
+    Returns
+    -------
+    loinc_code
+        LOINC code string associated with the observation, or ``None`` if absent.
+    """
+    for coding in obs.get("code", {}).get("coding", []) or []:
+        if coding.get("system") in {"http://loinc.org", "http://loinc.org/"}:
+            return coding.get("code")
     return None
 
 
 def _obs_numeric_value(obs: dict) -> float | None:
+    """
+    Extract a numeric measurement value from an observation resource.
+
+    Parameters
+    ----------
+    obs
+        Observation resource dictionary that may store its value in ``valueQuantity``
+        or ``valueString``.
+
+    Returns
+    -------
+    numeric_value
+        Floating-point observation value, or ``None`` when no numeric value can be parsed.
+    """
     vq = obs.get("valueQuantity")
     if vq and vq.get("value") is not None:
         try:
@@ -167,6 +323,21 @@ def _obs_numeric_value(obs: dict) -> float | None:
 
 
 def _age_at_encounter(birth_date: str | None, enc_start: str | None) -> float | None:
+    """
+    Compute patient age in years at the start of an encounter.
+
+    Parameters
+    ----------
+    birth_date
+        Patient birth date string from the FHIR patient resource.
+    enc_start
+        Encounter start date or datetime string.
+
+    Returns
+    -------
+    age_years
+        Patient age in years at encounter time, or ``None`` when the dates are unusable.
+    """
     bd = _parse_dt(birth_date)
     es = _parse_dt(enc_start)
     if not bd or not es:
@@ -178,7 +349,20 @@ def _age_at_encounter(birth_date: str | None, enc_start: str | None) -> float | 
 
 
 def _is_ems_like_encounter(enc: dict) -> bool:
-    """Heuristic: treat emergency encounters as EMS-relevant rows (Synthea proxy)."""
+    """
+    Determine whether an encounter should be treated as EMS-like for modeling.
+
+    Parameters
+    ----------
+    enc
+        Encounter resource dictionary to classify with the EMS heuristics.
+
+    Returns
+    -------
+    is_ems_like
+        ``True`` when the encounter matches the configured emergency-class heuristics,
+        otherwise ``False``.
+    """
     cls = enc.get("class") or {}
     code = (cls.get("code") or "").upper()
     if code in EMS_CLASS_CODES:
@@ -195,9 +379,17 @@ def _is_ems_like_encounter(enc: dict) -> bool:
 
 def _extract_transport_label(encounter: dict) -> int | None:
     """
-    Return 1 transport, 0 refusal, or None if unknown.
+    Extract the transport-versus-refusal label from an encounter resource.
 
-    Priority: custom extension → dischargeDisposition semantics.
+    Parameters
+    ----------
+    encounter
+        Encounter resource dictionary that may contain explicit or inferred transport labels.
+
+    Returns
+    -------
+    label
+        ``1`` for transport, ``0`` for refusal, or ``None`` when no label can be inferred.
     """
     for ext in encounter.get("extension", []) or []:
         if ext.get("url") != EMS_TRANSPORT_EXT_URL:
@@ -244,6 +436,23 @@ def _extract_transport_label(encounter: dict) -> int | None:
 
 
 def _chief_complaint(enc: dict, conditions: list[dict], patient_id: str) -> str:
+    """
+    Derive a chief-complaint text string for an encounter.
+
+    Parameters
+    ----------
+    enc
+        Encounter resource dictionary whose reason codes are checked first.
+    conditions
+        Condition resources used as a fallback source of complaint text.
+    patient_id
+        Identifier of the encounter's patient used to match related conditions.
+
+    Returns
+    -------
+    chief_complaint
+        Chief-complaint string associated with the encounter, truncated for storage.
+    """
     # Encounter.reasonCode (Synthea often populates)
     for rc in enc.get("reasonCode", []) or []:
         t = _concept_text(rc)
@@ -272,6 +481,25 @@ def _chief_complaint(enc: dict, conditions: list[dict], patient_id: str) -> str:
     return (best or "unknown")[:512]
 
 
+def _latest_numeric_value(candidates: list[tuple[datetime, float]]) -> float | None:
+    """
+    Select the most recent numeric vital value from timestamped candidates.
+
+    Parameters
+    ----------
+    candidates
+        Timestamp and value pairs collected for one vital-sign channel.
+
+    Returns
+    -------
+    latest_value
+        Most recent numeric value in the candidate list, or ``None`` if empty.
+    """
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
 def parse_fhir_to_dataframe(
     fhir_path: str | Path,
     *,
@@ -279,10 +507,22 @@ def parse_fhir_to_dataframe(
     only_ems_like: bool = True,
 ) -> pd.DataFrame:
     """
-    Load FHIR JSON from a file or directory and build one row per qualifying Encounter.
+    Parse FHIR resources into one modeling row per qualifying encounter.
 
-    Vitals: most recent Observation per LOINC within encounter period (inclusive of
-    observations up to 24h before start to capture vitals taken on scene).
+    Parameters
+    ----------
+    fhir_path
+        File or directory containing JSON or NDJSON FHIR resources to parse.
+    drop_unlabeled
+        Whether to discard encounters for which no transport label can be extracted.
+    only_ems_like
+        Whether to keep only encounters that match the EMS-like filtering heuristics.
+
+    Returns
+    -------
+    encounter_dataframe
+        Dataframe with one row per retained encounter containing demographics, vitals,
+        chief complaint, and transport label information.
     """
     path = Path(fhir_path)
     patients: dict[str, dict] = {}
@@ -335,20 +575,7 @@ def parse_fhir_to_dataframe(
         window_hi = end
 
         vitals_lists: dict[str, list[tuple[datetime, float]]] = {
-            "heart_rate": [],
-            "systolic_bp": [],
-            "diastolic_bp": [],
-            "respiratory_rate": [],
-            "spo2": [],
-            "temperature": [],
-        }
-        loinc_map = {
-            LOINC_HEART_RATE: "heart_rate",
-            LOINC_SYSTOLIC: "systolic_bp",
-            LOINC_DIASTOLIC: "diastolic_bp",
-            LOINC_RESP_RATE: "respiratory_rate",
-            LOINC_SPO2: "spo2",
-            LOINC_TEMP_F: "temperature",
+            column: [] for column in VITAL_LOINC_TO_COLUMN.values()
         }
 
         for obs in obs_by_patient.get(pid, []):
@@ -356,19 +583,15 @@ def parse_fhir_to_dataframe(
             if ot is None or ot < window_lo or ot > window_hi:
                 continue
             code = _obs_loinc_code(obs)
-            if not code or code not in loinc_map:
+            if not code:
                 continue
             val = _obs_numeric_value(obs)
             if val is None:
                 continue
-            col = loinc_map[code]
+            col = VITAL_LOINC_TO_COLUMN.get(code)
+            if col is None:
+                continue
             vitals_lists[col].append((ot, val))
-
-        def latest(candidates: list[tuple[datetime, float]]) -> float | None:
-            if not candidates:
-                return None
-            candidates.sort(key=lambda x: x[0])
-            return candidates[-1][1]
 
         age = _age_at_encounter(pat.get("birthDate"), start_s)
         sex = (pat.get("gender") or "unknown").lower()
@@ -379,12 +602,12 @@ def parse_fhir_to_dataframe(
             "patient_id": pid,
             "age": age,
             "sex": sex,
-            "heart_rate": latest(vitals_lists["heart_rate"]),
-            "systolic_bp": latest(vitals_lists["systolic_bp"]),
-            "diastolic_bp": latest(vitals_lists["diastolic_bp"]),
-            "respiratory_rate": latest(vitals_lists["respiratory_rate"]),
-            "spo2": latest(vitals_lists["spo2"]),
-            "temperature": latest(vitals_lists["temperature"]),
+            "heart_rate": _latest_numeric_value(vitals_lists["heart_rate"]),
+            "systolic_bp": _latest_numeric_value(vitals_lists["systolic_bp"]),
+            "diastolic_bp": _latest_numeric_value(vitals_lists["diastolic_bp"]),
+            "respiratory_rate": _latest_numeric_value(vitals_lists["respiratory_rate"]),
+            "spo2": _latest_numeric_value(vitals_lists["spo2"]),
+            "temperature": _latest_numeric_value(vitals_lists["temperature"]),
             "chief_complaint": cc,
             "transport": int(label) if label is not None else None,
         }
@@ -395,10 +618,21 @@ def parse_fhir_to_dataframe(
 
 def write_mock_fhir_directory(output_dir: str | Path, *, seed: int = 42, n_patients: int = 80) -> Path:
     """
-    Write Synthea-like patient Bundle JSON files with EMS-labeled emergency encounters.
+    Generate a directory of synthetic FHIR patient bundles for the EMS pipeline.
 
-    Labels are set via Encounter.extension (see EMS_TRANSPORT_EXT_URL) so the
-    pipeline has ground truth without relying on dischargeDisposition.
+    Parameters
+    ----------
+    output_dir
+        Directory where the generated patient bundle JSON files should be written.
+    seed
+        Random seed used to make the synthetic dataset generation reproducible.
+    n_patients
+        Number of synthetic patient bundle files to create.
+
+    Returns
+    -------
+    output_path
+        Path to the directory containing the generated mock FHIR bundle files.
     """
     rng = random.Random(seed)
     out = Path(output_dir)
@@ -407,7 +641,7 @@ def write_mock_fhir_directory(output_dir: str | Path, *, seed: int = 42, n_patie
     for _ in range(n_patients):
         pid = str(uuid.uuid4())
         birth_year = rng.randint(1940, 2005)
-        birth = f"{birth_year}-{rng.randint(1,12):02d}-{rng.randint(1,28):02d}"
+        birth = f"{birth_year}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}"
         gender = rng.choice(["male", "female", "other"])
 
         n_enc = rng.randint(1, 3)
@@ -423,7 +657,14 @@ def write_mock_fhir_directory(output_dir: str | Path, *, seed: int = 42, n_patie
 
         for _e in range(n_enc):
             eid = str(uuid.uuid4())
-            enc_start = datetime(2018 + rng.randint(0, 5), rng.randint(1, 12), rng.randint(1, 28), rng.randint(8, 20), 0, 0)
+            enc_start = datetime(
+                2018 + rng.randint(0, 5),
+                rng.randint(1, 12),
+                rng.randint(1, 28),
+                rng.randint(8, 20),
+                0,
+                0,
+            )
             duration_h = rng.uniform(0.5, 4.0)
             enc_end = enc_start + timedelta(hours=duration_h)
             # Synthetic label (ground truth in extension); vitals loosely correlate for ML demo
@@ -434,7 +675,14 @@ def write_mock_fhir_directory(output_dir: str | Path, *, seed: int = 42, n_patie
             if not transport and rng.random() < 0.2:
                 transport = True
 
-            ext_val = bool(transport)
+            # Chief complaints are biased by transport outcome so the dispatch
+            # feature carries real predictive signal.
+            if transport:
+                cc_pool = list(TRANSPORT_COMPLAINTS) * 7 + list(REFUSAL_COMPLAINTS) * 3
+            else:
+                cc_pool = list(REFUSAL_COMPLAINTS) * 7 + list(TRANSPORT_COMPLAINTS) * 3
+            chief_complaint_text = rng.choice(cc_pool)
+
             enc = {
                 "resourceType": "Encounter",
                 "id": eid,
@@ -459,30 +707,36 @@ def write_mock_fhir_directory(output_dir: str | Path, *, seed: int = 42, n_patie
                     "start": enc_start.isoformat(),
                     "end": enc_end.isoformat(),
                 },
-                "reasonCode": [
-                    {
-                        "text": rng.choice(
-                            [
-                                "Chest pain",
-                                "Shortness of breath",
-                                "Fall injury",
-                                "Abdominal pain",
-                                "Syncope",
-                                "General weakness",
-                            ]
-                        )
-                    }
-                ],
+                "reasonCode": [{"text": chief_complaint_text}],
                 "extension": [
                     {
                         "url": EMS_TRANSPORT_EXT_URL,
-                        "valueBoolean": ext_val,
+                        "valueBoolean": transport,
                     }
                 ],
             }
             entries.append({"resource": enc})
 
             def add_obs(loinc: str, base: float, noise: float, minutes_after: int):
+                """
+                Append one synthetic observation resource to the current patient bundle.
+
+                Parameters
+                ----------
+                loinc
+                    LOINC code identifying the vital sign being generated.
+                base
+                    Baseline numeric value around which the observation is sampled.
+                noise
+                    Standard deviation of Gaussian noise added to the baseline value.
+                minutes_after
+                    Minutes after encounter start at which the observation is timestamped.
+
+                Returns
+                -------
+                None
+                    Adds the generated observation resource to the enclosing bundle entry list.
+                """
                 oid = str(uuid.uuid4())
                 eff = enc_start + timedelta(minutes=minutes_after)
                 val = base + rng.gauss(0, noise)
@@ -502,14 +756,22 @@ def write_mock_fhir_directory(output_dir: str | Path, *, seed: int = 42, n_patie
                     }
                 )
 
-            hr_base = 88 if transport else 72
-            spo2_base = 93 if transport else 98
-            add_obs(LOINC_HEART_RATE, hr_base, 12, rng.randint(5, 40))
-            add_obs(LOINC_SYSTOLIC, 130 if transport else 118, 18, rng.randint(5, 45))
-            add_obs(LOINC_DIASTOLIC, 82 if transport else 76, 10, rng.randint(5, 45))
-            add_obs(LOINC_RESP_RATE, 22 if transport else 16, 4, rng.randint(5, 50))
-            add_obs(LOINC_SPO2, spo2_base, 3, rng.randint(5, 55))
-            add_obs(LOINC_TEMP_F, 99.2 if transport else 98.4, 0.8, rng.randint(5, 60))
+            hr_base = 90 if transport else 70
+            spo2_base = 92 if transport else 98
+            # Higher noise makes class distributions overlap (more realistic).
+            # ~15% chance each vital is missing (simulates field measurement gaps).
+            missing_prob = 0.15
+            vital_specs = (
+                (LOINC_HEART_RATE, hr_base, 18, 5, 40),
+                (LOINC_SYSTOLIC, 130 if transport else 118, 22, 5, 45),
+                (LOINC_DIASTOLIC, 82 if transport else 76, 14, 5, 45),
+                (LOINC_RESP_RATE, 22 if transport else 16, 5, 5, 50),
+                (LOINC_SPO2, spo2_base, 4, 5, 55),
+                (LOINC_TEMP_F, 99.2 if transport else 98.4, 1.0, 5, 60),
+            )
+            for loinc, base, noise, min_minutes, max_minutes in vital_specs:
+                if rng.random() > missing_prob:
+                    add_obs(loinc, base, noise, rng.randint(min_minutes, max_minutes))
 
             # Duplicate vital earlier (parser should pick most recent)
             add_obs(LOINC_HEART_RATE, hr_base - 5, 3, 2)
