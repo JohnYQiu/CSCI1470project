@@ -1,0 +1,146 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "b1880598-35e3-4b70-abaa-3ee4765ac914",
+        "gender": "female",
+        "birthDate": "1954-01-24"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "5e284627-15a8-4ce9-bbef-10c27a6c397a",
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "EMER"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "50849002",
+                "display": "Emergency room admission (procedure)"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/b1880598-35e3-4b70-abaa-3ee4765ac914"
+        },
+        "period": {
+          "start": "2019-03-24T09:00:00",
+          "end": "2019-03-24T11:52:06.413542"
+        },
+        "reasonCode": [
+          {
+            "text": "Shortness of breath"
+          }
+        ],
+        "extension": [
+          {
+            "url": "http://csci1470.local/fhir/StructureDefinition/ems-transport",
+            "valueBoolean": true
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "cae2f69a-7caa-4c5a-89a1-d7ff1d309a72",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/b1880598-35e3-4b70-abaa-3ee4765ac914"
+        },
+        "effectiveDateTime": "2019-03-24T09:43:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8462-4"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 91.19,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "3cb583cd-e5f9-4ba3-a96e-8c5a8b025fa8",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/b1880598-35e3-4b70-abaa-3ee4765ac914"
+        },
+        "effectiveDateTime": "2019-03-24T09:39:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9279-1"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 22.55,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "ef864059-0a26-4f10-9da7-a410c7674f9d",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/b1880598-35e3-4b70-abaa-3ee4765ac914"
+        },
+        "effectiveDateTime": "2019-03-24T09:33:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "59408-5"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 85.83,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "796edd9d-b745-4946-abed-973c5973652b",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/b1880598-35e3-4b70-abaa-3ee4765ac914"
+        },
+        "effectiveDateTime": "2019-03-24T09:02:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 82.09,
+          "unit": "unit"
+        }
+      }
+    }
+  ]
+}

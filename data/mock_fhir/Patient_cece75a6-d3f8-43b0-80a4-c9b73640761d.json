@@ -1,0 +1,370 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "cece75a6-d3f8-43b0-80a4-c9b73640761d",
+        "gender": "female",
+        "birthDate": "1999-09-21"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "7cc772e2-fe03-40f3-9684-0874be73cf14",
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "EMER"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "50849002",
+                "display": "Emergency room admission (procedure)"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "period": {
+          "start": "2020-06-17T15:00:00",
+          "end": "2020-06-17T17:07:51.651243"
+        },
+        "reasonCode": [
+          {
+            "text": "Fall injury"
+          }
+        ],
+        "extension": [
+          {
+            "url": "http://csci1470.local/fhir/StructureDefinition/ems-transport",
+            "valueBoolean": false
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "dfee652a-a3d8-4018-9153-348f5bbdee3c",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2020-06-17T15:28:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 83.22,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "6e863fc6-751a-4bec-a3a7-6f41d17571eb",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2020-06-17T15:07:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8480-6"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 103.63,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "2e371eba-2e34-4c1f-8970-2aca7ab69a95",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2020-06-17T15:42:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9279-1"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 14.65,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "22d0c1be-2470-47c7-93f8-75af9822a881",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2020-06-17T15:31:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "59408-5"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 97.26,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "d475d28e-0e31-476d-af28-e0e300ba60c2",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2020-06-17T15:41:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8310-5"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 99.03,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "ee7078ae-67c1-49c2-94f3-814bdbb006f5",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2020-06-17T15:02:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 66.76,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "d99e9ec6-3fc2-47bb-818a-a145bb9e0c55",
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "EMER"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "50849002",
+                "display": "Emergency room admission (procedure)"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "period": {
+          "start": "2023-11-11T12:00:00",
+          "end": "2023-11-11T15:10:18.343883"
+        },
+        "reasonCode": [
+          {
+            "text": "Abdominal pain"
+          }
+        ],
+        "extension": [
+          {
+            "url": "http://csci1470.local/fhir/StructureDefinition/ems-transport",
+            "valueBoolean": false
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "aa66b25a-6fe4-428b-999c-6048b68f47c9",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2023-11-11T12:27:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 51.67,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "6d4d3bb7-d5d0-47d7-977c-02d792e6a63e",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2023-11-11T12:39:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8480-6"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 69.06,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "7765d234-f33c-4a50-97f6-e160a309fb3e",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2023-11-11T12:08:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8462-4"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 78.29,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "200c4edc-6379-4bee-a00b-7f3a356173bb",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2023-11-11T12:09:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9279-1"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 22.99,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "2e23ba80-de79-4165-8ca0-0095220a0238",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2023-11-11T12:31:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "59408-5"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 95.99,
+          "unit": "unit"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "3808707f-df63-4a5f-89dd-5e4510c9be6d",
+        "status": "final",
+        "subject": {
+          "reference": "Patient/cece75a6-d3f8-43b0-80a4-c9b73640761d"
+        },
+        "effectiveDateTime": "2023-11-11T12:02:00",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 64.23,
+          "unit": "unit"
+        }
+      }
+    }
+  ]
+}
