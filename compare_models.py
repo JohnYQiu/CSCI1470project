@@ -2,7 +2,7 @@
 Full model comparison: all PyTorch architectures + sklearn classical ML baselines + ensemble.
 
 Usage:
-    python compare_models.py [--mock-patients N] [--epochs N] [--workdir PATH]
+    python compare_models.py [--data-dir PATH] [--epochs N] [--workdir PATH]
 
 Writes results to model_comparison_results.md.
 """
@@ -323,7 +323,7 @@ def write_results(results: pd.DataFrame, path: Path, n_patients: int, n_encounte
     path
         Output Markdown path where the formatted report should be written.
     n_patients
-        Number of mock patients represented in the comparison dataset summary.
+        Number of distinct patient identifiers in the comparison dataset summary.
     n_encounters
         Number of labeled encounters represented in the comparison dataset summary.
 
@@ -368,7 +368,7 @@ def write_results(results: pd.DataFrame, path: Path, n_patients: int, n_encounte
 
     content = f"""# Model Comparison Results
 
-**Dataset:** {n_patients} mock patients → {n_encounters} labeled EMS encounters
+**Dataset:** {n_patients} patients (modified Synthea FHIR) → {n_encounters} labeled EMS encounters
 **Split:** 70% train / 15% val / 15% test (stratified)
 **Features:** age, sex (one-hot), 6 raw vitals + 3 derived (shock index, pulse pressure, MAP), chief complaint (label-encoded)
 **Device:** CPU
@@ -454,8 +454,11 @@ def main() -> None:
         and writes the final results report.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir",      default="data/mock_fhir")
-    parser.add_argument("--mock-patients", type=int, default=200)
+    parser.add_argument(
+        "--data-dir",
+        default="data/modified_fhir",
+        help="Directory of FHIR JSON/NDJSON (default: modified Synthea bundles)",
+    )
     parser.add_argument("--epochs",        type=int, default=100)
     parser.add_argument("--patience",      type=int, default=12)
     parser.add_argument("--batch-size",    type=int, default=32)
@@ -466,9 +469,10 @@ def main() -> None:
     workdir   = Path(args.workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     if not fhir_parser.has_fhir_resources(data_path):
-        print(f"Generating {args.mock_patients} mock patients under {data_path}…")
-        data_path.mkdir(parents=True, exist_ok=True)
-        fhir_parser.write_mock_fhir_directory(data_path, n_patients=args.mock_patients)
+        raise SystemExit(
+            f"No FHIR JSON/NDJSON found under {data_path.resolve()}. "
+            "Place patient Bundle JSON files there (e.g. repo default data/modified_fhir)."
+        )
 
     print("Parsing FHIR…")
     df = fhir_parser.parse_fhir_to_dataframe(data_path, drop_unlabeled=True, only_ems_like=True)
@@ -489,7 +493,8 @@ def main() -> None:
     print("\n\n=== Final Results ===")
     print(results[["model", "type", "accuracy", "f1", "roc_auc"]].to_string(index=False))
 
-    write_results(results, Path("model_comparison_results.md"), args.mock_patients, len(df))
+    n_patients = int(df["patient_id"].nunique())
+    write_results(results, Path("model_comparison_results.md"), n_patients, len(df))
 
 
 if __name__ == "__main__":

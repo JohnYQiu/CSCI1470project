@@ -6,7 +6,7 @@ Synthea typically exports one JSON file per patient containing a Bundle with
 This module supports both layouts.
 
 EMS transport label (documented priority):
-1) Custom extension on Encounter (used by mock data and any custom exporter):
+1) Custom extension on Encounter (e.g. added when post-processing Synthea exports):
    URL ``http://csci1470.local/fhir/StructureDefinition/ems-transport``
    - valueBoolean: True = transport (1), False = refusal (0)
    - or valueString / valueCode: ``transport`` / ``refusal`` (case-insensitive)
@@ -16,14 +16,12 @@ EMS transport label (documented priority):
 
 3) If no signal is present, the row is skipped (``drop_unlabeled=True``) so training
    only uses explicit or inferable outcomes. Standard Synthea rarely encodes EMS
-   refusal; use mock data or add the extension in a post-processing step.
+   outcomes; add the extension (or discharge hints) in a post-processing step.
 """
 
 from __future__ import annotations
 
 import json
-import random
-import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
@@ -56,8 +54,6 @@ VITAL_LOINC_TO_COLUMN = {
     LOINC_SPO2: "spo2",
     LOINC_TEMP_F: "temperature",
 }
-TRANSPORT_COMPLAINTS = ("Chest pain", "Shortness of breath", "Syncope")
-REFUSAL_COMPLAINTS = ("General weakness", "Fall injury", "Abdominal pain")
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -614,171 +610,3 @@ def parse_fhir_to_dataframe(
         rows.append(row)
 
     return pd.DataFrame(rows)
-
-
-def write_mock_fhir_directory(output_dir: str | Path, *, seed: int = 42, n_patients: int = 80) -> Path:
-    """
-    Generate a directory of synthetic FHIR patient bundles for the EMS pipeline.
-
-    Parameters
-    ----------
-    output_dir
-        Directory where the generated patient bundle JSON files should be written.
-    seed
-        Random seed used to make the synthetic dataset generation reproducible.
-    n_patients
-        Number of synthetic patient bundle files to create.
-
-    Returns
-    -------
-    output_path
-        Path to the directory containing the generated mock FHIR bundle files.
-    """
-    rng = random.Random(seed)
-    out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
-
-    for _ in range(n_patients):
-        pid = str(uuid.uuid4())
-        birth_year = rng.randint(1940, 2005)
-        birth = f"{birth_year}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}"
-        gender = rng.choice(["male", "female", "other"])
-
-        n_enc = rng.randint(1, 3)
-        entries: list[dict[str, Any]] = []
-
-        pat = {
-            "resourceType": "Patient",
-            "id": pid,
-            "gender": gender,
-            "birthDate": birth,
-        }
-        entries.append({"resource": pat})
-
-        for _e in range(n_enc):
-            eid = str(uuid.uuid4())
-            enc_start = datetime(
-                2018 + rng.randint(0, 5),
-                rng.randint(1, 12),
-                rng.randint(1, 28),
-                rng.randint(8, 20),
-                0,
-                0,
-            )
-            duration_h = rng.uniform(0.5, 4.0)
-            enc_end = enc_start + timedelta(hours=duration_h)
-            # Synthetic label (ground truth in extension); vitals loosely correlate for ML demo
-            p_transport = 0.55
-            if rng.random() < 0.3:
-                p_transport += 0.15
-            transport = rng.random() < p_transport
-            if not transport and rng.random() < 0.2:
-                transport = True
-
-            # Chief complaints are biased by transport outcome so the dispatch
-            # feature carries real predictive signal.
-            if transport:
-                cc_pool = list(TRANSPORT_COMPLAINTS) * 7 + list(REFUSAL_COMPLAINTS) * 3
-            else:
-                cc_pool = list(REFUSAL_COMPLAINTS) * 7 + list(TRANSPORT_COMPLAINTS) * 3
-            chief_complaint_text = rng.choice(cc_pool)
-
-            enc = {
-                "resourceType": "Encounter",
-                "id": eid,
-                "status": "finished",
-                "class": {
-                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-                    "code": "EMER",
-                },
-                "type": [
-                    {
-                        "coding": [
-                            {
-                                "system": "http://snomed.info/sct",
-                                "code": "50849002",
-                                "display": "Emergency room admission (procedure)",
-                            }
-                        ]
-                    }
-                ],
-                "subject": {"reference": f"Patient/{pid}"},
-                "period": {
-                    "start": enc_start.isoformat(),
-                    "end": enc_end.isoformat(),
-                },
-                "reasonCode": [{"text": chief_complaint_text}],
-                "extension": [
-                    {
-                        "url": EMS_TRANSPORT_EXT_URL,
-                        "valueBoolean": transport,
-                    }
-                ],
-            }
-            entries.append({"resource": enc})
-
-            def add_obs(loinc: str, base: float, noise: float, minutes_after: int):
-                """
-                Append one synthetic observation resource to the current patient bundle.
-
-                Parameters
-                ----------
-                loinc
-                    LOINC code identifying the vital sign being generated.
-                base
-                    Baseline numeric value around which the observation is sampled.
-                noise
-                    Standard deviation of Gaussian noise added to the baseline value.
-                minutes_after
-                    Minutes after encounter start at which the observation is timestamped.
-
-                Returns
-                -------
-                None
-                    Adds the generated observation resource to the enclosing bundle entry list.
-                """
-                oid = str(uuid.uuid4())
-                eff = enc_start + timedelta(minutes=minutes_after)
-                val = base + rng.gauss(0, noise)
-                entries.append(
-                    {
-                        "resource": {
-                            "resourceType": "Observation",
-                            "id": oid,
-                            "status": "final",
-                            "subject": {"reference": f"Patient/{pid}"},
-                            "effectiveDateTime": eff.isoformat(),
-                            "code": {
-                                "coding": [{"system": "http://loinc.org", "code": loinc}]
-                            },
-                            "valueQuantity": {"value": round(val, 2), "unit": "unit"},
-                        }
-                    }
-                )
-
-            hr_base = 90 if transport else 70
-            spo2_base = 92 if transport else 98
-            # Higher noise makes class distributions overlap (more realistic).
-            # ~15% chance each vital is missing (simulates field measurement gaps).
-            missing_prob = 0.15
-            vital_specs = (
-                (LOINC_HEART_RATE, hr_base, 18, 5, 40),
-                (LOINC_SYSTOLIC, 130 if transport else 118, 22, 5, 45),
-                (LOINC_DIASTOLIC, 82 if transport else 76, 14, 5, 45),
-                (LOINC_RESP_RATE, 22 if transport else 16, 5, 5, 50),
-                (LOINC_SPO2, spo2_base, 4, 5, 55),
-                (LOINC_TEMP_F, 99.2 if transport else 98.4, 1.0, 5, 60),
-            )
-            for loinc, base, noise, min_minutes, max_minutes in vital_specs:
-                if rng.random() > missing_prob:
-                    add_obs(loinc, base, noise, rng.randint(min_minutes, max_minutes))
-
-            # Duplicate vital earlier (parser should pick most recent)
-            add_obs(LOINC_HEART_RATE, hr_base - 5, 3, 2)
-
-        bundle = {"resourceType": "Bundle", "type": "collection", "entry": entries}
-        fname = out / f"Patient_{pid}.json"
-        with fname.open("w", encoding="utf-8") as f:
-            json.dump(bundle, f, indent=2)
-
-    return out

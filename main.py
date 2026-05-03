@@ -1,5 +1,5 @@
 """
-End-to-end pipeline: load (or synthesize) FHIR → tabular dataset → preprocess → train → evaluate → experiments.
+End-to-end pipeline: load FHIR from disk → tabular dataset → preprocess → train → evaluate → experiments.
 """
 
 from __future__ import annotations
@@ -36,14 +36,8 @@ def main() -> None:
     parser.add_argument(
         "--data-dir",
         type=str,
-        default="data/mock_fhir",
-        help="Directory (or single JSON file) with Synthea-style FHIR resources",
-    )
-    parser.add_argument(
-        "--mock-patients",
-        type=int,
-        default=120,
-        help="If no JSON is found under --data-dir, generate this many mock patients",
+        default="data/modified_fhir",
+        help="Directory (or single JSON file) with Synthea-style FHIR resources (post-processed for labels)",
     )
     parser.add_argument("--epochs",      type=int,  default=100)
     parser.add_argument("--patience",    type=int,  default=12)
@@ -60,15 +54,17 @@ def main() -> None:
 
     data_path = Path(args.data_dir)
     if not fhir_parser.has_fhir_resources(data_path):
-        print(f"No FHIR JSON/NDJSON under {data_path}; generating mock Synthea-like bundles…")
-        data_path.mkdir(parents=True, exist_ok=True)
-        fhir_parser.write_mock_fhir_directory(data_path, n_patients=args.mock_patients)
+        raise SystemExit(
+            f"No FHIR JSON/NDJSON found under {data_path.resolve()}. "
+            "Place patient Bundle JSON files there (e.g. repo default data/modified_fhir)."
+        )
 
     print("Parsing FHIR into tabular rows (one row per EMS-like encounter)…")
     df = fhir_parser.parse_fhir_to_dataframe(data_path, drop_unlabeled=True, only_ems_like=True)
     if df.empty:
         raise SystemExit(
-            "No labeled rows produced. Add Encounter.extension transport labels or use mock data."
+            "No labeled rows produced. Ensure encounters include the EMS transport extension "
+            "or inferable discharge disposition (see fhir_parser module docstring)."
         )
     print(f"Dataset: {len(df)} rows, columns: {list(df.columns)}")
 
